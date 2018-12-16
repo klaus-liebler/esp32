@@ -1,0 +1,46 @@
+
+
+
+{
+    "configurations": [
+        {
+            "name": "ESP32-Windows",
+            "includePath": [
+                "${env:IDF_TOOLS_PATH}/tools/xtensa-esp32-elf/5.2.0/include",
+                "${env:IDF_TOOLS_PATH}/tools/lib/gcc/xtensa-esp32-elf/5.2.0/include",
+                "C:/esp32/components/esp32-ds18b20/include",
+                "C:/esp32/components/esp32-owb/include",
+                "${env:IDF_PATH}/components/freertos/include",
+                "${env:IDF_PATH}/components/esp_ringbuf/include",
+                "${env:IDF_PATH}/components/driver/include",
+                "${env:IDF_PATH}/components/esp32/include",
+                "${env:IDF_PATH}/components/soc/esp32/include",
+                "${env:IDF_PATH}/components/log/include",
+                "${env:IDF_PATH}/components/heap/include",
+                "${env:IDF_PATH}/components/soc/include",
+                "${env:IDF_PATH}/components/esp_event/include",
+                "${env:IDF_PATH}/components/tcpip_adapter/include",
+                "${env:IDF_PATH}/components/lwip/lwip/src/include",
+                "${env:IDF_PATH}/components/lwip/port/esp32/include",
+                "${env:IDF_PATH}/components/vfs/include",
+                "${env:IDF_PATH}/components/newlib/platform_include",
+                "${env:IDF_PATH}/components/lwip/include/apps",
+                "${env:IDF_PATH}/components/nvs_flash/include",
+                "${env:IDF_PATH}/components/spi_flash/include",
+                "${workspaceFolder}/main/include",
+                "${workspaceFolder}/build/config",
+                "${workspaceFolder}/main/hx711",
+                "${workspaceFolder}/main/lcd/include",
+                "${workspaceFolder}/main/lcd/Adafruit-GFX-Library",
+                "${workspaceFolder}/main/lcd/Adafruit-GFX-Library/Fonts"
+                
+            ],
+            "browse": {
+                "limitSymbolsToIncludedHeaders": true,
+                "databaseFilename": ""
+            },
+            "intelliSenseMode": "gcc-x64"
+        }
+    ],
+    "version": 4
+}

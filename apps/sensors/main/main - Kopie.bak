@@ -1,0 +1,320 @@
+/* Blink Example
+
+   This example code is in the Public Domain (or CC0 licensed, at your option.)
+
+   Unless required by applicable law or agreed to in writing, this
+   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+   CONDITIONS OF ANY KIND, either express or implied.
+*/
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/gpio.h"
+#include "bsec_integration.h"
+#include "driver/i2c.h"
+#include "sdkconfig.h"
+#include "include/i2c.h"
+#include "esp_err.h"
+#include "esp_log.h"
+#include "bme280.h"
+#include <time.h>
+
+/* singed integer type*/
+typedef int8_t s8;   /**< used for signed 8bit */
+typedef int16_t s16; /**< used for signed 16bit */
+typedef int32_t s32; /**< used for signed 32bit */
+typedef int64_t s64; /**< used for signed 64bit */
+
+typedef uint8_t u8;   /**< used for unsigned 8bit */
+typedef uint16_t u16; /**< used for unsigned 16bit */
+typedef uint32_t u32; /**< used for unsigned 32bit */
+typedef uint64_t u64; /**< used for unsigned 64bit */
+
+#define SDA_PIN GPIO_NUM_15
+#define SCL_PIN GPIO_NUM_2
+
+#define BME280_INIT_VALUE -1
+
+static inline unsigned get_ccount(void)
+{
+    unsigned r;
+    asm volatile("rsr %0, ccount"
+                 : "=r"(r));
+    return r;
+}
+
+void i2c_master_init()
+{
+    i2c_config_t c;
+    c.mode = I2C_MODE_MASTER;
+    c.sda_io_num = SDA_PIN;
+    c.scl_io_num = SCL_PIN;
+    c.sda_pullup_en = GPIO_PULLUP_ENABLE;
+    c.scl_pullup_en = GPIO_PULLUP_ENABLE;
+    c.master.clk_speed = 1000000;
+    esp_err_t e = i2c_param_config(I2C_NUM_0, &c);
+    if(e!=ESP_OK)
+    {
+        printf("Error in line %d: %d", __LINE__, e);
+    }
+    e= i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    
+}
+
+/*!
+ * @brief           Write operation in either I2C or SPI
+ *
+ * param[in]        dev_addr        I2C or SPI device address
+ * param[in]        reg_addr        register address
+ * param[in]        reg_data_ptr    pointer to the data to be written
+ * param[in]        data_len        number of bytes to be written
+ *
+ * @return          result of the bus communication function
+ */
+int8_t bus_write(uint8_t dev_addr, uint8_t reg_addr, uint8_t *reg_data_ptr, uint16_t data_len)
+{
+    esp_err_t e;
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+
+    e=i2c_master_start(cmd);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    e=i2c_master_write_byte(cmd, (dev_addr << 1) | I2C_MASTER_WRITE, true);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+
+    e=i2c_master_write_byte(cmd, reg_addr, true);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    e=i2c_master_write(cmd, reg_data_ptr, data_len, true);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    e=i2c_master_stop(cmd);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    e = i2c_master_cmd_begin(I2C_NUM_0, cmd, 10 / portTICK_PERIOD_MS);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    i2c_cmd_link_delete(cmd);
+    return e == ESP_OK?BME280_OK:BME280_E_COMM_FAIL;
+}
+
+/*!
+ * @brief           Read operation in either I2C or SPI
+ *
+ * param[in]        dev_addr        I2C or SPI device address
+ * param[in]        reg_addr        register address
+ * param[out]       reg_data_ptr    pointer to the memory to be used to store the read data
+ * param[in]        data_len        number of bytes to be read
+ *
+ * @return          result of the bus communication function
+ */
+int8_t bus_read(uint8_t dev_addr, uint8_t reg_addr, uint8_t *reg_data_ptr, uint16_t data_len)
+{
+    esp_err_t e;
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+
+    e=i2c_master_start(cmd);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    e=i2c_master_write_byte(cmd, (dev_addr << 1) | I2C_MASTER_WRITE, true);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    e=i2c_master_write_byte(cmd, reg_addr, true);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    e=i2c_master_start(cmd);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    e=i2c_master_write_byte(cmd, (dev_addr << 1) | I2C_MASTER_READ, true);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+
+    if (data_len > 1)
+    {
+        e=i2c_master_read(cmd, reg_data_ptr, data_len - 1, I2C_MASTER_ACK);
+        if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    }
+    e=i2c_master_read_byte(cmd, reg_data_ptr + data_len - 1, I2C_MASTER_NACK);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    e=i2c_master_stop(cmd);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+
+    e = i2c_master_cmd_begin(I2C_NUM_0, cmd, 10 / portTICK_PERIOD_MS);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    i2c_cmd_link_delete(cmd);
+    return e == ESP_OK?BME280_OK:BME280_E_COMM_FAIL;
+}
+
+/*!
+ * @brief           System specific implementation of sleep function
+ *
+ * @param[in]       t_ms    time in milliseconds
+ *
+ * @return          none
+ */
+void delay_ms(uint32_t t_ms)
+{
+    vTaskDelay(t_ms / portTICK_PERIOD_MS);
+}
+
+/*!
+ * @brief           Capture the system time in microseconds
+ *
+ * @return          system_current_time    current system timestamp in microseconds
+ */
+int64_t get_timestamp_us()
+{
+    return 1000 * (clock() * 1000 / CLOCKS_PER_SEC);
+}
+
+/*!
+ * @brief           Handling of the ready outputs
+ *
+ * @param[in]       timestamp       time in nanoseconds
+ * @param[in]       iaq             IAQ signal
+ * @param[in]       iaq_accuracy    accuracy of IAQ signal
+ * @param[in]       temperature     temperature signal
+ * @param[in]       humidity        humidity signal
+ * @param[in]       pressure        pressure signal
+ * @param[in]       raw_temperature raw temperature signal
+ * @param[in]       raw_humidity    raw humidity signal
+ * @param[in]       gas             raw gas sensor signal
+ * @param[in]       bsec_status     value returned by the bsec_do_steps() call
+ *
+ * @return          none
+ */
+void output_ready(int64_t timestamp, float iaq, uint8_t iaq_accuracy, float temperature, float humidity,
+                  float pressure, float raw_temperature, float raw_humidity, float gas, bsec_library_return_t bsec_status,
+                  float static_iaq, float co2_equivalent, float breath_voc_equivalent)
+{
+    printf("Ergebnis!!");
+}
+
+/*!
+ * @brief           Load previous library state from non-volatile memory
+ *
+ * @param[in,out]   state_buffer    buffer to hold the loaded state string
+ * @param[in]       n_buffer        size of the allocated state buffer
+ *
+ * @return          number of bytes copied to state_buffer
+ */
+uint32_t state_load(uint8_t *state_buffer, uint32_t n_buffer)
+{
+    // ...
+    // Load a previous library state from non-volatile memory, if available.
+    //
+    // Return zero if loading was unsuccessful or no state was available,
+    // otherwise return length of loaded state string.
+    // ...
+    return 0;
+}
+
+/*!
+ * @brief           Save library state to non-volatile memory
+ *
+ * @param[in]       state_buffer    buffer holding the state to be stored
+ * @param[in]       length          length of the state string to be stored
+ *
+ * @return          none
+ */
+void state_save(const uint8_t *state_buffer, uint32_t length)
+{
+    // ...
+    // Save the string some form of non-volatile memory, if possible.
+    // ...
+}
+
+/*!
+ * @brief           Load library config from non-volatile memory
+ *
+ * @param[in,out]   config_buffer    buffer to hold the loaded state string
+ * @param[in]       n_buffer        size of the allocated state buffer
+ *
+ * @return          number of bytes copied to config_buffer
+ */
+uint32_t config_load(uint8_t *config_buffer, uint32_t n_buffer)
+{
+    // ...
+    // Load a library config from non-volatile memory, if available.
+    //
+    // Return zero if loading was unsuccessful or no config was available,
+    // otherwise return length of loaded config string.
+    // ...
+    return 0;
+}
+
+void print_sensor_data(struct bme280_data *comp_data)
+{
+    printf("temp %d, p %d, hum %d\r\n",comp_data->temperature, comp_data->pressure, comp_data->humidity);
+}
+
+int8_t stream_sensor_data_forced_mode(struct bme280_dev *dev)
+{
+    int8_t e;
+    uint8_t settings_sel;
+    struct bme280_data comp_data;
+
+    /* Recommended mode of operation: Indoor navigation */
+    dev->settings.osr_h = BME280_OVERSAMPLING_1X;
+    dev->settings.osr_p = BME280_OVERSAMPLING_16X;
+    dev->settings.osr_t = BME280_OVERSAMPLING_2X;
+    dev->settings.filter = BME280_FILTER_COEFF_16;
+
+    settings_sel = BME280_OSR_PRESS_SEL | BME280_OSR_TEMP_SEL | BME280_OSR_HUM_SEL | BME280_FILTER_SEL;
+
+    e = bme280_set_sensor_settings(settings_sel, dev);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    printf("Temperature, Pressure, Humidity\r\n");
+    /* Continuously stream sensor data */
+    while (1)
+    {
+        e = bme280_set_sensor_mode(BME280_FORCED_MODE, dev);
+        if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+        /* Wait for the measurement to complete and print data @25Hz */
+        dev->delay_ms(1000);
+        e = bme280_get_sensor_data(BME280_ALL, &comp_data, dev);
+        if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+        print_sensor_data(&comp_data);
+    }
+    return e;
+}
+
+void task_bme280_normal_mode(void *ignore)
+{
+    struct bme280_dev dev;
+    s8 e = BME280_OK;
+
+    dev.dev_id = BME280_I2C_ADDR_PRIM;
+    dev.intf = BME280_I2C_INTF;
+    dev.read = bus_read;
+    dev.write = bus_write;
+    dev.delay_ms = delay_ms;
+
+    e = bme280_init(&dev);
+    if(e!=ESP_OK) printf("Error in line %d: %d", __LINE__, e);
+    stream_sensor_data_forced_mode(&dev);
+}
+
+// void sensor_task(void *pvParameter)
+// {
+//     return_values_init ret;
+//     /* Call to the function which initializes the BSEC library
+//     * Switch on low-power mode and provide no temperature offset */
+//     ret = bsec_iot_init(BSEC_SAMPLE_RATE_LP, 0.0f, bus_write, bus_read, sleepi2c, state_load, config_load);
+//     if (ret.bme680_status)
+//     {
+//         /* Could not intialize BME680 */
+//         printf("Error while initializing BME680");
+//         return;
+//     }
+//     else if (ret.bsec_status)
+//     {
+//         /* Could not intialize BSEC library */
+//         printf("Error while initializing BSEC library");
+//         return;
+//     }
+//     /* Call to endless loop function which reads and processes data based on sensor settings */
+//     /* State is saved every 10.000 samples, which means every 10.000 * 3 secs = 500 minutes */
+//     bsec_iot_loop(sleepi2c, get_timestamp_us, output_ready, state_save, 10000);
+// }
+
+extern "C"
+{
+    void app_main()
+    {
+        i2c_master_init();
+        //xTaskCreate(&sensor_task, "sensor_task", configMINIMAL_STACK_SIZE, NULL, 5, NULL);
+        xTaskCreate(&task_bme280_normal_mode, "bme280_normal_mode", 2048, NULL, 6, NULL);
+    }
+}

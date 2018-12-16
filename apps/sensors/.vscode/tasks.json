@@ -1,0 +1,119 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "options": {
+        "cwd": "${workspaceRoot}",
+        "env": { 
+            "IDF_PATH" : "${env:IDF_PATH}", 
+            "PATH" : "${env:PATH};${env:IDF_TOOLS_PATH}/tools/bin",
+            "PATHEXT":".COM;.EXE;.BAT;.CMD;.PY"
+        }
+    },
+    "tasks": [
+        {
+            "label": "analyze app",
+            "type": "shell",
+            "command":"nm",
+            "args": [
+                "nm",
+                "--print-size",
+                "--print-file-name",
+                "--radix=d",
+                "--size-sort",
+                "build/${workspaceFolderBasename}/lib${workspaceFolderBasename}.a"
+            ]
+        },
+        {
+            "label": "build app",
+            "type": "shell",
+            "command": "idf",
+            "args": [
+                "build"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "echo": true
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": ["relative", "${workspaceFolder}/build"],
+                "pattern": {
+                    "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            }
+        },
+        {
+            "label": "clean app",
+            "command": "idf.py",
+            "type": "shell",
+            "args": [
+                "clean"
+            ],
+            "presentation": {
+                "reveal": "always",
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "flash app",
+            "type": "shell",
+            "command": "C:/esp32/idftools/tools/bin/openocd.exe",//intensionally the full path to assure the right version
+            "args": [
+                "-f", "interface/ftdi/esp32_devkitj_v1.cfg",
+                "-f", "board/esp-wroom-32.cfg",
+                "-s", "C:/esp32/idftools/tools/share/openocd/scripts",
+                "-c", "program_esp32 build/${workspaceFolderBasename}.bin 0x10000 verify exit"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "openocd",
+            "type": "shell",
+            "isBackground": true,
+            "command": "C:/esp32/idftools/tools/bin/openocd.exe",//intensionally the full path to assure the right version
+            "args": [
+                "-f", "interface/ftdi/esp32_devkitj_v1.cfg",
+                "-f", "board/esp-wroom-32.cfg",
+                "-s", "C:/esp32/idftools/tools/share/openocd/scripts",
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "monitor",
+            "command": "idf.py",
+            "type": "shell",
+            "args": [
+                "flash",
+                "monitor"
+            ],
+            "presentation": {
+                "reveal": "always",
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "menuconfig",
+            "type":"shell",
+            "windows": {
+                "command": "idf",
+                "args": [
+                    "menuconfig"
+                ]
+            },
+            "presentation": {
+                "reveal": "always",
+            },
+            "problemMatcher": []
+        }
+    ]
+}

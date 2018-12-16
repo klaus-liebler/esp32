@@ -1,0 +1,5 @@
+ports/lwip/net.h: #include "ethernetif.h" -->#include "netif/ethernetif.h" #include "lwip/sockets.h" 
+Außerdem: Definitionen löschen
+
+ports/esp32/src/device.c: ../lib/stack/address.h-->#include "../../../include/address.h"
+char *BACnet_Version = "0.8.2";

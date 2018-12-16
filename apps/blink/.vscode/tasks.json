@@ -1,0 +1,62 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "options": {
+        "cwd": "${workspaceRoot}",
+        "env": { 
+            "IDF_PATH" : "${env.IDF_PATH}", 
+            "PATH" : "${env.PATH}:${env.IDF_TOOLS_PATH}/tools/bin" 
+        }
+    },
+    "tasks": [
+        {
+            "label": "print size",
+            "type": "shell",
+            "command":"nm",
+            "args": [
+                "nm",
+                "--print-size",
+                "--print-file-name",
+                "--radix=d",
+                "--size-sort",
+                "build/bacnet-stack/libbacnet-stack.a"
+            ]
+        },
+        {
+            "label": "build the sensors",
+            "type": "shell",
+            "command": "idf",
+            "args": [
+                "build"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": ["relative", "${workspaceFolder}/build"],
+                "pattern": {
+                    "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            }
+        },
+        {
+            "label": "flashViaJtag",
+            "type": "shell",
+            "command": "openocd",
+            "args": [
+                "-f", "interface/ftdi/esp32_devkitj_v1.cfg",
+                "-f", "board/esp-wroom-32.cfg",
+                "-c", "program_esp32 build/blink.bin 0x10000 verify exit"
+            ]
+            
+        }
+    ]
+}

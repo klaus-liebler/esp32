@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "name": "ESP32",
+            "includePath": [
+                "$(env:IDF_PATH)/components/driver/include",
+                "C:/esp32/components/bme280"
+            ],
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "intelliSenseMode": "gcc-x64"
+        }
+    ],
+    "version": 4
+}

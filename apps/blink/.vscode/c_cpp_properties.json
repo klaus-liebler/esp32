@@ -1,0 +1,19 @@
+{
+    "configurations": [
+        {
+            "name": "ESP32-Windows",
+            "includePath": [
+                "c:/esp32/components",
+                "${env:IDF_PATH}/components",
+                "${env:IDF_TOOLS_PATH}/tools/lib/gcc/xtensa-esp32-elf/5.2.0/include",
+                "${env:IDF_TOOLS_PATH}/tools/xtensa-esp32-elf/include/c++/5.2.0/tr1"
+            ],
+            "browse": {
+                "limitSymbolsToIncludedHeaders": true,
+                "databaseFilename": ""
+            },
+            "intelliSenseMode": "msvc-x64"
+        }
+    ],
+    "version": 4
+}

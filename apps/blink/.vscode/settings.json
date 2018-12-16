@@ -1,0 +1,9 @@
+{
+    "terminal.integrated.env.windows": {
+        "PATHEXT":".COM;.EXE;.BAT;.CMD;.PY",
+        "PATH": "${env:PATH};C:\\esp32\\idftools\\tools\\bin"
+    
+    },
+    "C_Cpp.errorSquiggles": "Disabled",
+    
+}
