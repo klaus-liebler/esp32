@@ -17,7 +17,7 @@ constexpr static char hdr_http200[]      = "HTTP/1.1 200 OK\r\nContent-type: ";
 constexpr static char hdr_contentHTML[]  = "text/html\r\n\r\n";
 constexpr static char hdr_contentICO[]   = "image/x-icon\r\n\r\n";
 constexpr static char hdr_contentJS[]    = "text/javascript\r\n\r\n";
-constexpr static char slash_w[]          = "/w";
+static char slash_w[]          = "/w";
 
 httpserver::httpserver(uint16_t port, gpio_num_t blinkgpio, void (*websocketcallback)(uint8_t num, WEBSOCKET_TYPE_t type, char* msg, uint64_t len)): port(port), blinkgpio(blinkgpio), websocketcallback(websocketcallback)
 {
