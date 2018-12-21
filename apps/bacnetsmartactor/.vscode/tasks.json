@@ -24,6 +24,23 @@
                 "build/${workspaceFolderBasename}/lib${workspaceFolderBasename}.a"
             ]
         },
+        
+        {
+            "label": "build web-prod",
+            "type": "shell",
+            "command": "npm",
+            "args": [
+                "run", "build",
+                "--config", "webpack.config.js",
+                "--mode=production" //In webpack 4 you have modes: production and development.
+            ],
+            "presentation": {
+                "reveal": "always",
+                "echo": true
+            },
+           
+            "problemMatcher": {}
+        },
         {
             "label": "build app",
             "type": "shell",

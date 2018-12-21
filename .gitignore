@@ -37,5 +37,7 @@ esp-idf/
 esp-iot-solution/
 idftools/
 **/build/
+**/node_modules/
+**/wwwdist/
 browse.vc.db
 sdkconfig*
