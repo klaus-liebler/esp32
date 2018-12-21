@@ -5,6 +5,6 @@ set(COMPONENT_SRCS 	"src/abort.c" "src/address.c" "src/apdu.c" "src/bacaddr.c" "
 
 
 set(COMPONENT_ADD_INCLUDEDIRS "include" "ports/lwip" )
-set(COMPONENT_PRIV_INCLUDEDIRS "${PROJECT_PATH}/main")
+set(COMPONENT_PRIV_INCLUDEDIRS "${PROJECT_PATH}/main/bacnet")
 set(COMPONENT_REQUIRES lwip driver)
 register_component()

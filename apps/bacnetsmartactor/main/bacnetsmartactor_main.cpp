@@ -1,60 +1,76 @@
+//standard includes
+#include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+
+//freertos includes
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include "freertos/event_groups.h"
+
+
+//ESP32 includes
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "esp_event_loop.h"
 #include "esp_log.h"
+//ESP32 peripherials include
 #include "nvs_flash.h"
+#include "driver/gpio.h"
 
-#include "lwip/err.h"
-#include "lwip/sys.h"
+//LWip includes
+#include "lwip/api.h"
 
+
+//BACnet includes
 #include "bacdef.h"
-
 #include "config.h"
 #include "txbuf.h"
 #include "client.h"
-
 #include "handlers.h"
 #include "datalink.h"
 #include "dcc.h"
 #include "tsm.h"
-// conflict filename address.h with another file in default include paths
-#include "../../../components/bacnet-stack/include/address.h"
+#include "../../../components/bacnet-stack/include/address.h"// conflict filename address.h with another file in default include paths
 #include "bip.h"
-
 #include "device.h"
 #include "ai.h"
 #include "bo.h"
 
-#include "esp_log.h"
-#include "esp_wifi.h"
-#include "esp_event_loop.h"
-#include "nvs_flash.h"
-
-#include "driver/gpio.h"
-
-#include "lwip/sockets.h"
-#include "lwip/netdb.h"
-
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/event_groups.h"
+//HTTP-Server and WebsocketServer includes
 #include "httpserver/httpserver.h"
 
-#define TAG = "MAIN";
+//external components include
+#include <BME280.h>
 
-// hidden function not in any .h files
-extern uint8_t temprature_sens_read();
-extern uint32_t hall_sens_read();
+//Helpers
+#include "cJSON.h"
 
 
-#include "passwords.h" //defines structure wifi_config_t wifi_config ...
+static char const* const LOG_TAG = "MAIN";
+
+extern "C" {
+    // hidden function not in any .h files
+    extern uint8_t temprature_sens_read();
+    extern uint32_t hall_sens_read();
+}
+
+
+extern const uint8_t store_index_start[] asm("_binary_index_html_start");
+extern const uint8_t store_index_end[]   asm("_binary_index_html_end");
+
+#include "sdkconfig.h"
+
+
+
+wifi_config_t wifi_config = {};
 
 // ESP32 DevKit has LED on GPIO2
 constexpr gpio_num_t BACNET_LED = GPIO_NUM_2;
+constexpr gpio_num_t SDA_PIN    = GPIO_NUM_21;
+constexpr gpio_num_t SCL_PIN    = GPIO_NUM_22;
+constexpr uint8_t BME280_ADDR   = 0x76;
 
 uint8_t Handler_Transmit_Buffer[MAX_PDU] = { 0 };
 uint8_t Rx_Buf[MAX_MPDU] = { 0 };
@@ -66,7 +82,63 @@ static EventGroupHandle_t s_wifi_event_group;
  * - are we connected to the AP with an IP? */
 const int WIFI_CONNECTED_BIT = BIT0;
 
-static httpserver httpd(80, BACNET_LED);
+struct ProcessImage
+{
+    float temp;
+    float humid;
+} processImage;
+
+// handles websocket events
+void websocket_callback(uint8_t num,WEBSOCKET_TYPE_t type,char* msg,uint64_t len) {
+  const static char* TAG = "websocket_callback";
+  int value;
+  switch(type) {
+    case WEBSOCKET_CONNECT:
+      ESP_LOGI(TAG,"client %i connected!",num);
+      break;
+    case WEBSOCKET_DISCONNECT_EXTERNAL:
+      ESP_LOGI(TAG,"client %i sent a disconnect message",num);
+      gpio_set_level(BACNET_LED, 0);
+      break;
+    case WEBSOCKET_DISCONNECT_INTERNAL:
+      ESP_LOGI(TAG,"client %i was disconnected",num);
+      break;
+    case WEBSOCKET_DISCONNECT_ERROR:
+      ESP_LOGI(TAG,"client %i was disconnected due to an error",num);
+      gpio_set_level(BACNET_LED, 0);
+      break;
+    case WEBSOCKET_TEXT:
+      if(len) {
+        switch(msg[0]) {
+          case 'L':
+            if(sscanf(msg,"L%i",&value)) {
+              ESP_LOGI(TAG,"LED value: %i",value);
+              if(value==0){
+                  gpio_set_level(BACNET_LED, 0);
+              }
+              else
+              {
+                  gpio_set_level(BACNET_LED, 1);
+              }
+              ws_server_send_text_all_from_callback(msg,len); // broadcast it!
+            }
+        }
+      }
+      break;
+    case WEBSOCKET_BIN:
+      ESP_LOGI(TAG,"client %i sent binary message of size %i:\n%s",num,(uint32_t)len,msg);
+      break;
+    case WEBSOCKET_PING:
+      ESP_LOGI(TAG,"client %i pinged us with message of size %i:\n%s",num,(uint32_t)len,msg);
+      break;
+    case WEBSOCKET_PONG:
+      ESP_LOGI(TAG,"client %i responded to the ping",num);
+      break;
+  }
+}
+
+static httpserver httpd80(80, BACNET_LED, websocket_callback);
+
 
 /* BACnet handler, stack init, IAm */
 void StartBACnet()
@@ -99,31 +171,45 @@ void StartBACnet()
 extern "C" {
     esp_err_t wifi_event_handler(void *ctx, system_event_t *event)
     {
+        const char* LOG_TAG = "WIFI_EVT_HDLR";
         switch(event->event_id) {
+            case SYSTEM_EVENT_AP_START:
+                ESP_LOGI(LOG_TAG,"SYSTEM_EVENT_AP_START");
+                break;
+            case SYSTEM_EVENT_AP_STOP:
+                ESP_LOGI(LOG_TAG,"SYSTEM_EVENT_AP_STOP");
+                break;
             case SYSTEM_EVENT_AP_STACONNECTED:
-                ESP_LOGI(TAG, "station:"MACSTR" join, AID=%d", MAC2STR(event->event_info.sta_connected.mac), event->event_info.sta_connected.aid);
+                ESP_LOGI(LOG_TAG, "SYSTEM_EVENT_AP_STACONNECTED station:" MACSTR " join, AID=%d", MAC2STR(event->event_info.sta_connected.mac), event->event_info.sta_connected.aid);
                 break;
             case SYSTEM_EVENT_AP_STADISCONNECTED:
-                ESP_LOGI(TAG, "station:"MACSTR"leave, AID=%d", MAC2STR(event->event_info.sta_disconnected.mac), event->event_info.sta_disconnected.aid);
+                ESP_LOGI(LOG_TAG, "SYSTEM_EVENT_AP_STADISCONNECTED station:" MACSTR "leave, AID=%d", MAC2STR(event->event_info.sta_disconnected.mac), event->event_info.sta_disconnected.aid);
+                break;
+            case SYSTEM_EVENT_AP_PROBEREQRECVED:
+                ESP_LOGI(LOG_TAG,"SYSTEM_EVENT_AP_PROBEREQRECVED");
                 break;
             case SYSTEM_EVENT_STA_START:
-                esp_wifi_connect();
+                ESP_LOGI(LOG_TAG, "SYSTEM_EVENT_STA_START");
+                ESP_ERROR_CHECK(esp_wifi_connect());
                 break;
             case SYSTEM_EVENT_STA_CONNECTED:
                 break ;
             case SYSTEM_EVENT_STA_GOT_IP:
-                ESP_LOGI(TAG, "got ip:%s", ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
+                ESP_LOGI(LOG_TAG, "SYSTEM_EVENT_STA_GOT_IP;\n  ip:%s\n  m:%s\n  gw:%s", 
+                    ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip),
+                    ip4addr_ntoa(&event->event_info.got_ip.ip_info.netmask),
+                    ip4addr_ntoa(&event->event_info.got_ip.ip_info.gw)
+                    );
                 if (xEventGroupGetBits(s_wifi_event_group)!=WIFI_CONNECTED_BIT)
                 {            
                     xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
                     StartBACnet();
-                    httpd.Start()
                 }
                 break;
             case SYSTEM_EVENT_STA_DISCONNECTED:
-                esp_wifi_connect(); 
+            ESP_LOGI(LOG_TAG, "SYSTEM_EVENT_STA_DISCONNECTED");
+                ESP_ERROR_CHECK(esp_wifi_connect()); 
                 xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-                ESP_LOGI(TAG,"retry to connect to the AP");
                 bip_cleanup();
                 break;
             default:
@@ -133,61 +219,124 @@ extern "C" {
     }
 }
 
-void wifi_init_sta(void)
+void wifi_init_sta(void *arg)
 {
     s_wifi_event_group = xEventGroupCreate();
     
     tcpip_adapter_init();
-    ESP_ERROR_CHECK(esp_event_loop_init(wifi_event_handler, NULL) );
+    ESP_ERROR_CHECK(esp_event_loop_init(wifi_event_handler, arg));
 
+    strcpy((char*)wifi_config.ap.ssid, CONFIG_WIFI_SSID);
+    strcpy((char*)wifi_config.ap.password, CONFIG_WIFI_PASSWORD);
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start() );
 
-    ESP_LOGI(TAG, "wifi_init_sta finished.");
-    ESP_LOGI(TAG, "connect to ap SSID:%s password:%s",
+    ESP_LOGI(LOG_TAG, "wifi init finished, trying to connect to ap SSID:%s password:%s",
              wifi_config.sta.ssid, wifi_config.sta.password);
 }
 
-void wifi_init_softap()
+void wifi_init_softap(void *arg)
 {
     s_wifi_event_group = xEventGroupCreate();
 
     tcpip_adapter_init();
-    ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL));
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     
-    if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
-        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-    }
+    //Setting Access points IP things manualle
+    ESP_ERROR_CHECK(tcpip_adapter_dhcps_stop(TCPIP_ADAPTER_IF_AP));
+    tcpip_adapter_ip_info_t info;
+    memset(&info, 0, sizeof(info));
+    IP4_ADDR(&info.ip, 192, 168, 192, 1);
+    IP4_ADDR(&info.gw, 192, 168, 192, 1);
+    IP4_ADDR(&info.netmask, 255, 255, 255, 0);
+    ESP_LOGI(LOG_TAG,"setting gateway IP");
+    ESP_ERROR_CHECK(tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_AP, &info));
+    ESP_LOGI(LOG_TAG,"starting DHCPS adapter");
+    ESP_ERROR_CHECK(tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_AP));
 
+
+    ESP_ERROR_CHECK(esp_event_loop_init(wifi_event_handler, arg));
+
+    wifi_init_config_t wifi_init_cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&wifi_init_cfg));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+
+    strcpy((char*)wifi_config.ap.ssid, CONFIG_WIFI_SSID);
+    strcpy((char*)wifi_config.ap.password, CONFIG_WIFI_PASSWORD);
+    wifi_config.ap.channel=0;
+    wifi_config.ap.authmode=WIFI_AUTH_WPA2_PSK;
+    wifi_config.ap.ssid_hidden=0;
+    wifi_config.ap.max_connection=4;
+    wifi_config.ap.beacon_interval=180;
+
+
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_LOGI(TAG, "wifi_init_softap finished.SSID:%s password:%s",
-             EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+    ESP_LOGI(LOG_TAG,"WiFi set up finished");
 }
 
-void Httpd80_Task(void *pvParameters)
+void SensorsTask(void *pvParameters)
 {
-    httpd.Task();
+    char jsonbuffer[512];
+    BME280 bme280 = BME280();
+    bme280.setDebug(true);
+    bme280.init(SDA_PIN, SCL_PIN, BME280_ADDR);
+
+    cJSON *root, *info, *d;
+    while (1) {
+        bme280_reading_data sensor_data = bme280.readSensorData();
+        processImage.temp=sensor_data.temperature;
+        processImage.humid= sensor_data.humidity;
+        
+        root = cJSON_CreateObject();
+        cJSON_AddItemToObject(root, "d", d = cJSON_CreateObject());
+        cJSON_AddItemToObject(root, "info", info = cJSON_CreateObject());
+        cJSON_AddStringToObject(d, "myName", "BacnetSmartActor");
+        cJSON_AddNumberToObject(d, "temperature", processImage.temp);
+        cJSON_AddNumberToObject(d, "humidity", processImage.humid);
+        cJSON_AddNumberToObject(info, "heap", esp_get_free_heap_size());
+        cJSON_AddStringToObject(info, "sdk", esp_get_idf_version());
+        cJSON_AddNumberToObject(info, "time", esp_log_timestamp());
+
+        cJSON_PrintPreallocated(root, jsonbuffer, sizeof(jsonbuffer) / sizeof(jsonbuffer[0]), false);
+        cJSON_Delete(root);
+
+        printf("Temperature:%.2foC, Humidity: %.2f%%, Pressure: %.2fPa\n",
+               (double) sensor_data.temperature,
+               (double) sensor_data.humidity,
+               (double) sensor_data.pressure
+        );
+        ws_server_send_text_all(jsonbuffer, strlen(jsonbuffer));
+        vTaskDelay(3000 / portTICK_PERIOD_MS);
+    }
 }
 
+void HttpdTask(void *pvParameters)
+{
+    httpserver *myhttpd = (httpserver *)pvParameters;
+    ESP_LOGI(LOG_TAG, "Starting the HttpdTask on port %d", myhttpd->GetPort());
+    myhttpd->TaskServer();
+}
+
+void HttpdHandlerTask(void *pvParameters)
+{
+    httpserver *myhttpd = (httpserver *)pvParameters;
+    ESP_LOGI(LOG_TAG, "Starting the HttpdHandlerTask on port %d", myhttpd->GetPort());
+    myhttpd->TaskServerHandler();
+}
 
 /* Bacnet Task */
 void BACnetTask(void *pvParameters)
 {  
     uint16_t pdu_len = 0;
-    BACNET_ADDRESS src = {
-        0
-    };
+    BACNET_ADDRESS src = {};
     unsigned timeout = 1;  
 
     Device_Init(NULL);
@@ -258,27 +407,41 @@ esp_err_t setup_peripherials()
 extern "C" {
     void app_main()
     {    
-        ESP_LOGI(TAG, "app_main reached");
+        ESP_LOGI(LOG_TAG, "app_main reached");
         nvs_flash_init();
-        system_init();
         setup_peripherials();
         
-        wifi_init_sta(); 
-        // Cannot run BACnet code here, the default stack size is to small : 4096 byte
+        
+        wifi_init_softap(NULL); 
+
+        ws_server_start();
         xTaskCreate(
             BACnetTask,     /* Function to implement the task */
             "BACnetTask",   /* Name of the task */
             10000,          /* Stack size in words */
             NULL,           /* Task input parameter */
             20,             /* Priority of the task */
-            NULL);          /* Task handle. */   
+            NULL);          /* Task handle. */ 
         xTaskCreate(
-            Httpd80_Task,     /* Function to implement the task */
-            "Httpd80_Task",   /* Name of the task */
-            4096,          /* Stack size in words */
+            HttpdTask,     /* Function to implement the task */
+            "HttpdTask80",   /* Name of the task */
+            3000,          /* Stack size in words */
+            &httpd80,           /* Task input parameter */
+            9,             /* Priority of the task */
+            NULL);          /* Task handle. */ 
+        xTaskCreate(
+            HttpdHandlerTask,     /* Function to implement the task */
+            "HttpdHandlerTask80",   /* Name of the task */
+            4000,          /* Stack size in words */
+            &httpd80,           /* Task input parameter */
+            6,             /* Priority of the task */
+            NULL);          /* Task handle. */ 
+        xTaskCreate(
+            SensorsTask,     /* Function to implement the task */
+            "SensorsTask",   /* Name of the task */
+            4000,          /* Stack size in words */
             NULL,           /* Task input parameter */
-            20,             /* Priority of the task */
-            NULL);          /* Task handle. */   
-    }
+            6,             /* Priority of the task */
+            NULL);          /* Task handle. */ 
     }
 }

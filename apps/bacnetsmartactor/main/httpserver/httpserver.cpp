@@ -1,145 +1,157 @@
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 #include "lwip/sys.h"
 #include "lwip/netdb.h"
 #include "lwip/api.h"
 #include "esp_log.h"
 #include "driver/gpio.h"
 #include "cJSON.h"
-#include "string.h"
+#include "freertos/FreeRTOS.h"
+#include "esp_system.h"
 #include "httpserver/httpserver.h"
-//set(COMPONENT_EMBED_TXTFILES html/index.html)
+#include "websocket_server.h"
 
-static constexpr char *TAG = "HTTPSERV";
+constexpr static char LOG_TAG[]          = "HTTP_SERV";
+constexpr static char hdr_http200[]      = "HTTP/1.1 200 OK\r\nContent-type: ";
+constexpr static char hdr_contentHTML[]  = "text/html\r\n\r\n";
+constexpr static char hdr_contentICO[]   = "image/x-icon\r\n\r\n";
+constexpr static char hdr_contentJS[]    = "text/javascript\r\n\r\n";
+constexpr static char slash_w[]          = "/w";
 
-constexpr static char http_html_hdr[] = "HTTP/1.1 200 OK\r\nContent-type: text/html\r\n\r\n";
-
-extern const uint8_t index_html_start[] asm("_binary_html_index_html_start");
-extern const uint8_t index_html_end[] asm("_binary_html_index_html_end");
-size_t index_hmtl_size = index_html_end - index_html_start;
-char buffer[2048];
-
-httpserver::httpserver(uint16_t port, gpio_num_t blinkgpio) : port(port), blinkgpio(blinkgpio)
+httpserver::httpserver(uint16_t port, gpio_num_t blinkgpio, void (*websocketcallback)(uint8_t num, WEBSOCKET_TYPE_t type, char* msg, uint64_t len)): port(port), blinkgpio(blinkgpio), websocketcallback(websocketcallback)
 {
+  this->client_queue = xQueueCreate(CONFIG_WEBSOCKET_SERVER_QUEUE_SIZE, sizeof(struct netconn*));
 }
 
-esp_err_t httpserver::Task()
+extern const uint8_t store_index_start[] asm("_binary_index_html_start");
+extern const uint8_t store_index_end[] asm("_binary_index_html_end");
+const size_t store_index_size = store_index_end - store_index_start;
+extern const uint8_t store_favicon_start[] asm("_binary_favicon_ico_start");
+extern const uint8_t store_favicon_end[] asm("_binary_favicon_ico_end");
+const size_t store_favicon_size = store_favicon_end - store_favicon_start;
+
+
+esp_err_t httpserver::TaskServer()
 {
   struct netconn *conn, *newconn;
-  err_t err;
+  err_t err = ESP_OK;
   conn = netconn_new(NETCONN_TCP);
-  netconn_bind(conn, NULL, this->port);
-  netconn_listen(conn);
-  do
+  err=netconn_bind(conn, IP_ADDR_ANY, this->port);
+  if(err!=ESP_OK) return err;
+  err=netconn_listen(conn);
+  if(err!=ESP_OK) return err;
+  while ((err=netconn_accept(conn, &newconn)) == ERR_OK)
   {
-    err = netconn_accept(conn, &newconn);
-    if (err == ERR_OK)
-    {
-      NetconnServe(newconn);
-      netconn_delete(newconn);
-    }
-  } while (err == ERR_OK);
+    xQueueSendToBack(client_queue,&newconn,portMAX_DELAY);
+  }
+  //close connection
   netconn_close(conn);
   netconn_delete(conn);
-  return ESP_OK;
+  ESP_LOGE(LOG_TAG,"TaskServer ending, rebooting board");
+  esp_restart();
 }
 
-static void servertask()
+esp_err_t httpserver::TaskServerHandler()
 {
+  struct netconn *conn;
+  err_t err = ESP_OK;
+  conn = netconn_new(NETCONN_TCP);
+  netconn_bind(conn, IP_ADDR_ANY, this->port);
+  netconn_listen(conn);
+  while (xQueueReceive(client_queue,&conn,portMAX_DELAY)==pdTRUE)
+  {
+    if(!conn) continue;
+    NetconnServe(conn);
+  }
+  //close connection
+  netconn_close(conn);
+  netconn_delete(conn);
+   vTaskDelete(NULL);
+  return err;
 }
 
-static void generate_json()
+
+void httpserver::generateJson()
 {
   cJSON *root, *info, *d;
   root = cJSON_CreateObject();
-
   cJSON_AddItemToObject(root, "d", d = cJSON_CreateObject());
   cJSON_AddItemToObject(root, "info", info = cJSON_CreateObject());
-
   cJSON_AddStringToObject(d, "myName", "CMMC-ESP32-NANO");
   cJSON_AddNumberToObject(d, "temperature", 30.100);
   cJSON_AddNumberToObject(d, "humidity", 70.123);
-
   cJSON_AddStringToObject(info, "ssid", "dummy");
-  cJSON_AddNumberToObject(info, "heap", system_get_free_heap_size());
-  cJSON_AddStringToObject(info, "sdk", system_get_sdk_version());
-  cJSON_AddNumberToObject(info, "time", system_get_time());
-
-  while (true)
-  {
-    cJSON_ReplaceItemInObject(info, "heap",
-                              cJSON_CreateNumber(system_get_free_heap_size()));
-    cJSON_ReplaceItemInObject(info, "time",
-                              cJSON_CreateNumber(system_get_time()));
-    cJSON_ReplaceItemInObject(info, "sdk",
-                              cJSON_CreateString(system_get_sdk_version()));
-    cJSON_PrintPreallocated(root, buffer, sizeof(buffer) / sizeof(buffer[0]), false);
-    printf("[len = %d]  ", strlen(buffer));
-  }
+  cJSON_AddNumberToObject(info, "heap", esp_get_free_heap_size());
+  cJSON_AddStringToObject(info, "sdk", esp_get_idf_version());
+  cJSON_AddNumberToObject(info, "time", esp_log_timestamp());
+  cJSON_PrintPreallocated(root, buffer, sizeof(buffer) / sizeof(buffer[0]), false);
+  cJSON_Delete(root);
 }
 
+//Runs in a queued thread
 esp_err_t httpserver::NetconnServe(struct netconn *conn)
 {
   struct netbuf *inbuf;
-  char *buf;
+  char *buf; 
   u16_t buflen;
   err_t err;
 
-  /* Read the data from the port, blocking if nothing yet there.
-   We assume the request (the part we care about) is in one netbuf */
+  netconn_set_recvtimeout(conn,1000); // allow a connection timeout of 1 second
   err = netconn_recv(conn, &inbuf);
+  if (err != ERR_OK)
+    goto CLOSE;
 
-  if (err == ERR_OK)
+  err = netbuf_data(inbuf, (void **)&buf, &buflen);
+  if (err != ERR_OK)
+    goto CLOSE;
+
+  ESP_LOGI(LOG_TAG, "Processing Request %.20s", buf);
+  if (!(buflen >= 5 && buf[0] == 'G' && buf[1] == 'E' && buf[2] == 'T' && buf[3] == ' ' && buf[4] == '/'))
+    goto CLOSE;
+
+  if(buf[5]=='w')//handle very specific websocket case
   {
-    netbuf_data(inbuf, (void **)&buf, &buflen);
-
-    // strncpy(_mBuffer, buf, buflen);
-
-    /* Is this an HTTP GET command? (only check the first 5 chars, since
-    there are other formats for GET, and we're keeping it very simple )*/
-    ESP_LOGI(TAG, "buffer = %s \n", buf);
-    if (buflen >= 5 &&
-        buf[0] == 'G' &&
-        buf[1] == 'E' &&
-        buf[2] == 'T' &&
-        buf[3] == ' ' &&
-        buf[4] == '/')
-    {
-      printf("buf[5] = %c\n", buf[5]);
-      /* Send the HTML header
-             * subtract 1 from the size, since we dont send the \0 in the string
-             * NETCONN_NOCOPY: our data is const static, so no need to copy it
-       */
-
-      netconn_write(conn, http_html_hdr, sizeof(http_html_hdr) - 1, NETCONN_NOCOPY);
-
-      if (buf[5] == 'h')
-      {
-        gpio_set_level(blinkgpio, 0);
-        /* Send our HTML page */
-        netconn_write(conn, index_html_start, index_hmtl_size, NETCONN_NOCOPY);
-      }
-      else if (buf[5] == 'l')
-      {
-        gpio_set_level(blinkgpio, 1);
-
-        /* Send our HTML page */
-        netconn_write(conn, index_html_start, index_hmtl_size, NETCONN_NOCOPY);
-      }
-      else if (buf[5] == 'j')
-      {
-        generate_json();
-        netconn_write(conn, buffer, strlen(buffer), NETCONN_NOCOPY);
-      }
-      else
-      {
-        netconn_write(conn, index_html_start, index_hmtl_size, NETCONN_NOCOPY);
-      }
-    }
+        ESP_LOGI(LOG_TAG,"Requesting websocket on /w");
+        ws_server_add_client(conn, buf, buflen, slash_w, this->websocketcallback);
+        netbuf_delete(inbuf);
+        return ESP_OK;
   }
-  /* Close the connection (server closes in HTTP) */
-  netconn_close(conn);
 
-  /* Delete the buffer (netconn_recv gives us ownership,
-   so we have to make sure to deallocate the buffer) */
+  err=netconn_write(conn, hdr_http200, sizeof(hdr_http200)-1, NETCONN_NOCOPY);
+  if (err != ERR_OK)
+    goto CLOSE;
+  
+  switch (buf[5])
+  {
+  case 'f'://f for favicon.ico
+    err=netconn_write(conn, hdr_contentICO, sizeof(hdr_contentICO)-1, NETCONN_NOCOPY);
+    err=netconn_write(conn, store_favicon_start, store_favicon_size, NETCONN_NOCOPY);
+    break;
+  case 'j':
+    generateJson();
+    err=netconn_write(conn, hdr_contentJS, sizeof(hdr_contentJS)-1, NETCONN_NOCOPY);
+    err=netconn_write(conn, buffer, strlen(buffer), NETCONN_NOCOPY);
+    break;
+  case 'h':
+    gpio_set_level(blinkgpio, 0);
+    err=netconn_write(conn, hdr_contentHTML, sizeof(hdr_contentHTML)-1, NETCONN_NOCOPY);
+    err=netconn_write(conn, store_index_start, store_index_size, NETCONN_NOCOPY);
+    break;
+  case 'l':
+    gpio_set_level(blinkgpio, 1);
+    err=netconn_write(conn, hdr_contentHTML, sizeof(hdr_contentHTML)-1, NETCONN_NOCOPY);
+    err=netconn_write(conn, store_index_start, store_index_size, NETCONN_NOCOPY);
+    break;
+  default:
+    //no change in blinkgpio 
+    err=netconn_write(conn, hdr_contentHTML, sizeof(hdr_contentHTML)-1, NETCONN_NOCOPY);
+    err=netconn_write(conn, store_index_start, store_index_size, NETCONN_NOCOPY);
+    break;
+  }
+CLOSE:
+  netconn_close(conn);
+  netconn_delete(conn);
   netbuf_delete(inbuf);
+  return err;
 }

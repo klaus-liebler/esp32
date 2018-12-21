@@ -38,4 +38,4 @@ esp-iot-solution/
 idftools/
 **/build/
 browse.vc.db
-passwords.h
+sdkconfig*
