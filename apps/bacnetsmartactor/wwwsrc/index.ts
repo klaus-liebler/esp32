@@ -1,9 +1,61 @@
 //import * as _ from "lodash";
 import "./index.scss";
 
-document.addEventListener("DOMContentLoaded", function(){
+declare var feather: any;
+declare var Chart:any;
 
-    //var foo = [1,2,3];
+document.addEventListener("DOMContentLoaded", function(){
+  feather.replace()
+
+  // Graphs
+  var ctx = document.getElementById('myChart')
+  // eslint-disable-next-line no-unused-vars
+  var myChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [
+        'Sunday',
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday'
+      ],
+      datasets: [{
+        data: [
+          15339,
+          21345,
+          18483,
+          24003,
+          23489,
+          24092,
+          12034
+        ],
+        lineTension: 0,
+        backgroundColor: 'transparent',
+        borderColor: '#007bff',
+        borderWidth: 4,
+        pointBackgroundColor: '#007bff'
+      }]
+    },
+    options: {
+      scales: {
+        yAxes: [{
+          ticks: {
+            beginAtZero: false
+          }
+        }]
+      },
+      legend: {
+        display: false
+      }
+    }
+  });
+    
+  
+  
+  //var foo = [1,2,3];
     //var bar = _.concat(foo, [4,5]);
     //console.debug(bar);//just a test for lodash!
     document.getElementById("test").innerHTML = "WebSocket is not connected";

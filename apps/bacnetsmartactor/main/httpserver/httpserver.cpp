@@ -43,7 +43,7 @@ esp_err_t httpserver::TaskServer()
   if(err!=ESP_OK) return err;
   while ((err=netconn_accept(conn, &newconn)) == ERR_OK)
   {
-    xQueueSendToBack(client_queue,&newconn,portMAX_DELAY);
+    xQueueSendToBack(this->client_queue,&newconn,portMAX_DELAY);
   }
   //close connection
   netconn_close(conn);
@@ -54,20 +54,14 @@ esp_err_t httpserver::TaskServer()
 
 esp_err_t httpserver::TaskServerHandler()
 {
-  struct netconn *conn;
   err_t err = ESP_OK;
-  conn = netconn_new(NETCONN_TCP);
-  netconn_bind(conn, IP_ADDR_ANY, this->port);
-  netconn_listen(conn);
-  while (xQueueReceive(client_queue,&conn,portMAX_DELAY)==pdTRUE)
+  struct netconn *conn;
+  while (xQueueReceive(this->client_queue,&conn,portMAX_DELAY)==pdTRUE)
   {
     if(!conn) continue;
     NetconnServe(conn);
   }
-  //close connection
-  netconn_close(conn);
-  netconn_delete(conn);
-   vTaskDelete(NULL);
+  vTaskDelete(NULL);
   return err;
 }
 

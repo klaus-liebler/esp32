@@ -39,8 +39,9 @@
 #include "bo.h"
 
 //HTTP-Server and WebsocketServer includes
+#include "websocket_server.h"
 #include "httpserver/httpserver.h"
-
+//#include "httpsserver/httpsserver.h"
 //external components include
 #include <BME280.h>
 
@@ -89,7 +90,7 @@ struct ProcessImage
 } processImage;
 
 // handles websocket events
-void websocket_callback(uint8_t num,WEBSOCKET_TYPE_t type,char* msg,uint64_t len) {
+void websocket_callback(uint8_t num, WEBSOCKET_TYPE_t type,char* msg,uint64_t len) {
   const static char* TAG = "websocket_callback";
   int value;
   switch(type) {
@@ -137,8 +138,8 @@ void websocket_callback(uint8_t num,WEBSOCKET_TYPE_t type,char* msg,uint64_t len
   }
 }
 
-static httpserver httpd80(80, BACNET_LED, websocket_callback);
-
+static httpserver httpd(80, BACNET_LED, websocket_callback);
+//static httpsserver httpd(443, websocket_callback);
 
 /* BACnet handler, stack init, IAm */
 void StartBACnet()
@@ -203,7 +204,7 @@ extern "C" {
                 if (xEventGroupGetBits(s_wifi_event_group)!=WIFI_CONNECTED_BIT)
                 {            
                     xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-                    StartBACnet();
+                    
                 }
                 break;
             case SYSTEM_EVENT_STA_DISCONNECTED:
@@ -335,6 +336,7 @@ void HttpdHandlerTask(void *pvParameters)
 /* Bacnet Task */
 void BACnetTask(void *pvParameters)
 {  
+    ESP_LOGI(LOG_TAG, "Starting the BACnetTask");
     uint16_t pdu_len = 0;
     BACNET_ADDRESS src = {};
     unsigned timeout = 1;  
@@ -342,6 +344,8 @@ void BACnetTask(void *pvParameters)
     Device_Init(NULL);
     Device_Set_Object_Instance_Number(12);
    
+    StartBACnet();
+
     uint32_t tickcount=xTaskGetTickCount();
 
     while (1)
@@ -349,38 +353,38 @@ void BACnetTask(void *pvParameters)
         vTaskDelay(10 / portTICK_PERIOD_MS); // could be remove to speed the code
 
         // do nothing if not connected to wifi
-        xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
-        { 
-            uint32_t newtick=xTaskGetTickCount();
+        //xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
+        
+        uint32_t newtick=xTaskGetTickCount();
 
-            // one second elapse at least (maybe much more if Wifi was deconnected for a long)
-            if ((newtick<tickcount)||((newtick-tickcount)>=configTICK_RATE_HZ))
-            {
-                tickcount=newtick;
-                dcc_timer_seconds(1);
-                bvlc_maintenance_timer(1); 
-                handler_cov_timer_seconds(1);
-                tsm_timer_milliseconds(1000);
+        // one second elapse at least (maybe much more if Wifi was deconnected for a long)
+        if ((newtick<tickcount)||((newtick-tickcount)>=configTICK_RATE_HZ))
+        {
+            tickcount=newtick;
+            dcc_timer_seconds(1);
+            bvlc_maintenance_timer(1); 
+            handler_cov_timer_seconds(1);
+            tsm_timer_milliseconds(1000);
 
-                // Read analog values from internal sensors
-                Analog_Input_Present_Value_Set(0,temprature_sens_read());
-                Analog_Input_Present_Value_Set(1,hall_sens_read());
+            // Read analog values from internal sensors
+            Analog_Input_Present_Value_Set(0,processImage.temp);
+            Analog_Input_Present_Value_Set(1,processImage.humid);
 
-            }
-
-            pdu_len = datalink_receive(&src, &Rx_Buf[0], MAX_MPDU, timeout);
-            if (pdu_len) 
-            {                
-                npdu_handler(&src, &Rx_Buf[0], pdu_len);
-
-                if(Binary_Output_Present_Value(0)==BINARY_ACTIVE)
-                    gpio_set_level(BACNET_LED,1);
-                else
-                    gpio_set_level(BACNET_LED,0);       
-            }
-
-            handler_cov_task();
         }
+
+        pdu_len = datalink_receive(&src, &Rx_Buf[0], MAX_MPDU, timeout);
+        if (pdu_len) 
+        {                
+            npdu_handler(&src, &Rx_Buf[0], pdu_len);
+
+            if(Binary_Output_Present_Value(0)==BINARY_ACTIVE)
+                gpio_set_level(BACNET_LED,1);
+            else
+                gpio_set_level(BACNET_LED,0);       
+        }
+
+        handler_cov_task();
+        
     }
 }
 
@@ -411,9 +415,7 @@ extern "C" {
         nvs_flash_init();
         setup_peripherials();
         
-        
         wifi_init_softap(NULL); 
-
         ws_server_start();
         xTaskCreate(
             BACnetTask,     /* Function to implement the task */
@@ -424,16 +426,16 @@ extern "C" {
             NULL);          /* Task handle. */ 
         xTaskCreate(
             HttpdTask,     /* Function to implement the task */
-            "HttpdTask80",   /* Name of the task */
+            "HttpdTask",   /* Name of the task */
             3000,          /* Stack size in words */
-            &httpd80,           /* Task input parameter */
+            &httpd,           /* Task input parameter */
             9,             /* Priority of the task */
             NULL);          /* Task handle. */ 
         xTaskCreate(
             HttpdHandlerTask,     /* Function to implement the task */
-            "HttpdHandlerTask80",   /* Name of the task */
+            "HttpdHandlerTask",   /* Name of the task */
             4000,          /* Stack size in words */
-            &httpd80,           /* Task input parameter */
+            &httpd,           /* Task input parameter */
             6,             /* Priority of the task */
             NULL);          /* Task handle. */ 
         xTaskCreate(

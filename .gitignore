@@ -40,4 +40,5 @@ idftools/
 **/node_modules/
 **/wwwdist/
 browse.vc.db
-sdkconfig*
+sdkconfig.*
+sdkconfig

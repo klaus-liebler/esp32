@@ -141,6 +141,8 @@ void Analog_Input_Init(
             Analog_Input_Alarm_Summary);
 #endif
     }
+    AI_Descr[0].Units = UNITS_DEGREES_CELSIUS;
+    AI_Descr[1].Units = UNITS_PERCENT_RELATIVE_HUMIDITY;
 }
 
 /* we simply have 0-n object instances.  Yours might be */
@@ -247,9 +249,9 @@ bool Analog_Input_Object_Name(
     bool status = false;
 
     if (object_instance==0)
-        status=characterstring_init_ansi(object_name, "Internal Temperature");
+        status=characterstring_init_ansi(object_name, "Temperature");
     else if (object_instance==1)
-        status=characterstring_init_ansi(object_name, "Magnetic field");
+        status=characterstring_init_ansi(object_name, "Humidity");
     else
     {
         index = Analog_Input_Instance_To_Index(object_instance);

@@ -10,8 +10,7 @@
 
 #include "bip.h"
 
-long bip_getaddrbyname(
-    const char *host_name)
+long bip_getaddrbyname(const char *host_name)
 {
     return 0;
 }
@@ -33,7 +32,7 @@ bool bip_init(char *ifname)
 
     int value = 1;
 
-    tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_STA, &ip_info);
+    tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_AP, &ip_info);
 
     bip_set_interface(ifname);    
     bip_set_port(htons(0xBAC0));

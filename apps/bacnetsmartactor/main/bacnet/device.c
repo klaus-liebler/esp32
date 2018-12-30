@@ -361,9 +361,9 @@ static BACNET_DEVICE_STATUS System_Status = STATUS_OPERATIONAL;
 static char *Vendor_Name = BACNET_VENDOR_NAME;
 static uint16_t Vendor_Identifier = BACNET_VENDOR_ID;
 static char Model_Name[MAX_DEV_MOD_LEN + 1] = "ESP32";
-static char Application_Software_Version[MAX_DEV_VER_LEN + 1] = "1.0";
-static char Location[MAX_DEV_LOC_LEN + 1] = "FR";
-static char Description[MAX_DEV_DESC_LEN + 1] = "WHS Bacnet SmartActor by Professor-K";
+static char Application_Software_Version[MAX_DEV_VER_LEN + 1] = "0.1";
+static char Location[MAX_DEV_LOC_LEN + 1] = "DE";
+static char Description[MAX_DEV_DESC_LEN + 1] = "W-HS BACnet SmartActor by Professor-K";
 char *BACnet_Version = "0.8.2";
 /* static uint8_t Protocol_Version = 1; - constant, not settable */
 /* static uint8_t Protocol_Revision = 4; - constant, not settable */
@@ -1822,7 +1822,7 @@ void Device_Init(
         characterstring_init_ansi(&My_Object_Name, uciname);
     } else {
 #endif /* defined(BAC_UCI) */
-        characterstring_init_ansi(&My_Object_Name, "ESP32 SimpleServer");
+        characterstring_init_ansi(&My_Object_Name, "W-HS BACnet SmartActor");
 #if defined(BAC_UCI)
     }
     ucix_cleanup(ctx);
