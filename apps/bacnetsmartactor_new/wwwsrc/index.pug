@@ -1,0 +1,78 @@
+doctype html  
+html
+  head
+    meta(charset="utf-8")
+    title BACnet SmartActor Dashboard
+    link(rel="stylesheet" type="text/css" href="../wwwdist/index.css" inline)
+  body
+    img(src="../wwwsrc/symbols.svg" inline)
+    header
+      h1 BACnet SmartActor Dashboard
+    nav
+      ul
+        li
+          svg.icon.icon-home
+            use(xlink:href="#icon-home")
+          a(data-show="dashboard" href="javascript:void(0)") Dashboard
+        li
+          svg.icon.icon-calendar
+            use(xlink:href="#icon-home")
+          a(data-show="shedule" href="javascript:void(0)") Manage Schedules
+        li
+          svg.icon.icon-wrench
+            use(xlink:href="#icon-wrench")
+          a(data-show="calibrate" href="javascript:void(0)") Calibrate
+        li
+          svg.icon.icon-make-group
+            use(xlink:href="#icon-make-group")
+          a(data-show="develop" href="javascript:void(0)") Develop
+        li
+          svg.icon.icon-enter
+            use(xlink:href="#icon-enter")
+          a(data-show="blinds" href="javascript:void(0)") Blinds
+        li
+          svg.icon.icon-sun
+            use(xlink:href="#icon-sun")
+          a(data-show="lightening" href="javascript:void(0)") Lightening
+        li
+          svg.icon.icon-stats-dots
+            use(xlink:href="#icon-stats-dots")
+          a(data-show="reports" href="javascript:void(0)") Reports
+    main
+      #screen_dashboard
+        p ConnectionState: 
+          span#spnConnectionState
+        #pButtons
+          button(type="button" data-rel="1") Relais 1 on
+          button(type="button" data-rel="0") Relais 1 off
+          #led1(style="display:inline-block;top:5px;width:20px; height:20px; background-color: black")
+          button(type="button" data-rel="3") Relais 2 on
+          button(type="button" data-rel="2") Relais 2 off
+          #led2(style="display:inline-block;top:5px;width:20px; height:20px; background-color: black")
+        p
+          table
+            tr
+              th Parameter
+              th Value
+            tr
+              td Name
+              td#td_myName
+            tr
+              td Temperature
+              td#td_temperature
+            tr
+              td Humidity
+              td#td_humidity
+            tr
+              td Heap
+              td#td_heap
+            tr
+              td Time
+              td#td_time
+      #screen_develop.flowchart-example-container
+      #screen_reports(style="background-color:beige; height:100%; width:100%;")
+        .ct-chart
+    
+    footer Klaus Liebler, Westfälische Hochschule &copy;2019
+    script(src="../wwwsrc/chartist.js" inline)
+    script(src="../wwwdist/bundle.js" inline)

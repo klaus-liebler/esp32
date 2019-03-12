@@ -1,0 +1,23 @@
+{
+  "name": "bacnetsmartactor-scripts",
+  "version": "0.1.0",
+  "description": "Various build scripts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/klaus-liebler/esp32"
+  },
+  "author": "Klaus Liebler, Westfälische Hochschule",
+  "license": "MIT",
+  "scripts": {
+    "start": "npm run serve",
+    "build": "npm run build-sass && npm run build-ts && npm run tslint && npm run copy-static-assets"
+  },
+  "dependencies": {
+    "node-forge": "^0.7.6"
+  },
+  "devDependencies": {
+    "@types/node": "^10.12.18",
+    "@types/node-forge": "^0.7.10",
+    "typescript": "^3.2.2"
+  }
+}

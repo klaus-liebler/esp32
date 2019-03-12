@@ -1,0 +1,78 @@
+<nav>
+    <ul>
+      <li><svg class="icon icon-home">
+          <use xlink:href="#icon-home"></use>
+        </svg><a id="show_screen_dashboard" href="javascript:void(0)">Dashboard</a></li>
+      <li><svg class="icon icon-calendar">
+          <use xlink:href="#icon-calendar"></use>
+        </svg><a href="javascript:void(0)">Create Schedule</a></li>
+      <li><svg class="icon icon-wrench">
+          <use xlink:href="#icon-wrench"></use>
+        </svg><a href="javascript:void(0)">Calibrate</a></li>
+      <li><svg class="icon icon-wrench">
+          <use xlink:href="#icon-make-group"></use>
+        </svg><a id="show_screen_develop" href="javascript:void(0)">Develop</a></li>
+      <li><svg class="icon icon-enter">
+          <use xlink:href="#icon-enter"></use>
+        </svg><a href="javascript:void(0)">Blinds</a></li>
+      <li><svg class="icon icon-sun">
+          <use xlink:href="#icon-sun"></use>
+        </svg><a href="javascript:void(0)">Lightening</a></li>
+      <li><svg class="icon icon-stats-dots">
+          <use xlink:href="#icon-stats-dots"></use>
+        </svg><a id="show_screen_reports" href="javascript:void(0)">Reports</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <div id="screen_dashboard">
+      <p>ConnectionState: <span id="spnConnectionState"></span></p>
+      <div id="pButtons">
+        <button type="button" data-rel="1">Relais 1 on</button>
+        <button type="button" data-rel="0">Relais 1 off</button>
+        <div id="led1" style="display:inline-block;top:5px;width:20px; height:20px; background-color: black"></div>
+        <button type="button" data-rel="3">Relais 2 on</button>
+        <button type="button" data-rel="2">Relais 2 off</button>
+        <div id="led2" style="display:inline-block;top:5px;width:20px; height:20px; background-color: black"></div>
+        </p>
+        <p>
+          <table>
+            <tr>
+              <th>Parameter</th>
+              <th>Value</th>
+            </tr>
+            <tr>
+              <td>Name</td>
+              <td id="td_myName"></td>
+            </tr>
+            <tr>
+              <td>Temperature</td>
+              <td id="td_temperature"></td>
+            </tr>
+            <tr>
+              <td>Humidity</td>
+              <td id="td_humidity"></td>
+            </tr>
+            <tr>
+              <td>Heap</td>
+              <td id="td_heap"></td>
+            </tr>
+            <tr>
+              <td>Time</td>
+              <td id="td_time"></td>
+            </tr>
+          </table>
+        </p>
+      </div>
+    </div>
+    <div id="screen_develop" class="flowchart-example-container"></div>
+    <div id="screen_reports" style="background-color:beige; height:100%; width:100%;">
+      <div class="ct-chart"></div>
+    </div>
+  </main>
+  <footer>Klaus Liebler, Westfälische Hochschule &copy;2019</footer>
+  <script src="../wwwsrc/chartist.js" inline></script>
+  <script src="../wwwdist/bundle.js" inline></script>
+</body>
+
+</html>

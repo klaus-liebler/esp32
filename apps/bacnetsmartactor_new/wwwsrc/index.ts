@@ -1,11 +1,10 @@
-import "./index.scss";
 import { FlowchartOptions, FlowchartData, Flowchart } from "./flowchart";
 declare let Chartist: any;
 
 abstract class ScreenController {
     constructor(protected div: HTMLDivElement) { this.hide(); }
     get ElementId() { return this.div.id }
-    abstract startup();
+    abstract startup():void;
     public show() {
         this.div.style.display = "block";
     }
@@ -84,10 +83,10 @@ class DashboardController extends ScreenController {
 class ReportsController extends ScreenController {
     private  data = {
         // A labels array that can contain any sort of values
-        labels: [],
+        labels: [20],
         // Our series array that contains series objects or in this case series data arrays
         series: [
-            []
+            [20]
         ],
         low: 0,
         high: 40
@@ -139,16 +138,16 @@ class AppController {
 
 
     public startup() {
-        this.dashboard = new DashboardController(<HTMLDivElement>document.getElementById("screen_dashboard"));
-        this.develop = new DevelopController(<HTMLDivElement>document.getElementById("screen_develop"));
-        this.reports = new ReportsController(<HTMLDivElement>document.getElementById("screen_reports"));
+        this.dashboard = new DashboardController(<HTMLDivElement>document.querySelector("#screen_dashboard"));
+        this.develop = new DevelopController(<HTMLDivElement>document.querySelector("#screen_develop"));
+        this.reports = new ReportsController(<HTMLDivElement>document.querySelector("#screen_reports"));
         this.linkmap.set("showDashboard", this.dashboard);
         this.linkmap.set("showReports", this.reports);
         this.linkmap.set("showDevelop", this.develop);
         document.querySelectorAll("nav a").forEach((a: HTMLAnchorElement) => {
             a.onclick = (e) => {
                 for (let controller of this.linkmap.values()) {
-                    if ((<HTMLAnchorElement>e.target).id == "show_" + controller.ElementId) {
+                    if (a.dataset.show == controller.ElementId) {
                         controller.show();
                     }
                     else {

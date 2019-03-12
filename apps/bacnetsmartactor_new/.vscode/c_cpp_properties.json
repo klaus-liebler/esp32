@@ -1,0 +1,16 @@
+{
+    "env": {
+        "XTENSA_ESP32_ELF_PATH": "C:/esp32/idftools/tools/xtensa-esp32-elf"
+    },
+    "configurations": [
+        {
+            "name": "ESP32",
+            "compilerPath": "C:/esp32/idftools/tools/bin/xtensa-esp32-elf-gcc.exe",
+            "compileCommands": "${workspaceRoot}/build/compile_commands.json",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "gcc-x64"
+        }
+    ],
+    "version": 4
+}

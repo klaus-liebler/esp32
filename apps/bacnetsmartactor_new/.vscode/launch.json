@@ -1,0 +1,73 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+			"name": "OpenOCD Debug 1",
+			"type": "gdb",
+			"request": "attach",
+			"printCalls": true,
+			"executable": "${workspaceRoot}/build/${workspaceFolderBasename}.elf",
+			"target": ":3333",
+			"remote": true,
+			"cwd": "${workspaceRoot}",
+			"autorun": [
+				// "interrupt",
+                "monitor reset halt",
+                "mon program_esp32 build/${workspaceFolderBasename}.bin 0x10000 verify",
+				"flushregs",
+				"break app_main"
+			],
+			"preLaunchTask": "openocd",
+			// "preLaunchTask": "Build",
+			// "preLaunchTask": "Flash",
+			"gdbpath": "${env:IDF_TOOLS_PATH}/tools/bin/xtensa-esp32-elf-gdb"
+		},
+        {
+            "name": "DEPR OpenOCD Debug 2",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/build/${workspaceFolderBasename}.elf",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd": "${workspaceRoot}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:/esp32/idftools/tools/bin/xtensa-esp32-elf-gdb.exe",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                     "text": "file \"c:/esp32/${workspaceFolderBasename}/build/${workspaceFolderBasename}.elf\""
+                },
+                {
+                    "text": "target remote localhost:3333"
+                },
+                {
+                    "text": "monitor reset halt"
+                },
+                {
+                    "text": "flushregs"
+                },
+                {
+                    "text": "thb app_main"
+                }
+            ],
+            
+            "logging": {
+                "trace": true,
+                "traceResponse": true,
+                "engineLogging": true
+            }
+            
+            
+            
+            
+
+            
+        }
+    ]
+}

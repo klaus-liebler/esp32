@@ -4,18 +4,18 @@
   "description": "",
   "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "webpack"
+    "test": "echo \"Error: no tests installed\" && exit 1",
+    "build": "webpack --config webpack.config.js --mode=production",
+    "build:dev": "webpack --config webpack.config.js --mode=development",
+    "start": "node server.js",
+    "prestart": "npm run build"
   },
   "keywords": [],
   "author": "Klaus Liebler, Gelsenkirchen University of Applied Sciences",
   "license": "ISC",
-  "dependencies": {
-    "lodash": "^4.17.11"
-  },
   "devDependencies": {
-    "@types/lodash": "^4.14.119",
     "clean-webpack-plugin": "^1.0.0",
+    "compression-webpack-plugin": "^2.0.0",
     "css-loader": "^2.0.1",
     "html-minifier": "^3.5.21",
     "html-webpack-inline-source-plugin": "0.0.10",
@@ -28,7 +28,7 @@
     "ts-loader": "^5.3.2",
     "typescript": "^3.2.2",
     "uglifyjs-webpack-plugin": "^2.0.1",
-    "webpack": "^4.28.1",
+    "webpack": "^4.28.4",
     "webpack-cli": "^3.1.2"
   }
 }
